@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Build output
+dist/
+*.zip
+
+# Secrets and local config: never commit these
+.env
+.env.*
+*.pem
+*.key
+.aws/
+credentials
+config.local.*
+
+# Real financial data: only the synthetic data/sample_transactions.csv is allowed
+data/*
+!data/sample_transactions.csv
+*.xlsx
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
