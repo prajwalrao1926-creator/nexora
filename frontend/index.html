@@ -3,28 +3,46 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>NEXORA · See what's next.</title>
 <meta name="description" content="NEXORA: cash-flow forecasting and financial health checks for small businesses.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-<div class="app">
-  <nav class="sidebar" aria-label="Sections">
-    <a class="brand" href="#top" aria-label="NEXORA home"><svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#0F1B33" stroke="#22D3EE" stroke-width="1.5"/><path d="M8 23V9l16 14V9" fill="none" stroke="#22D3EE" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span>NEXORA</span></a>
-    <a class="nav" href="#data" data-target="data"><i>⇪</i><span>Data</span></a>
-    <a class="nav" href="#overview" data-target="overview"><i>◎</i><span>Overview</span></a>
-    <a class="nav" href="#forecast" data-target="forecast"><i>⌁</i><span>Forecast</span></a>
-    <a class="nav" href="#health" data-target="health"><i>♡</i><span>Health</span></a>
-    <a class="nav" href="#alerts" data-target="alerts"><i>!</i><span>Alerts</span></a>
-    <a class="nav" href="#obligations" data-target="obligations"><i>☰</i><span>Obligations</span></a>
-    <a class="nav" href="#recs" data-target="recs"><i>✓</i><span>Actions</span></a>
-  </nav>
+<nav class="gnav" aria-label="Sections">
+  <div class="gnav-in">
+    <a class="brand" href="#top" aria-label="NEXORA home">
+      <svg viewBox="0 0 32 32" width="20" height="20" aria-hidden="true"><path d="M8 23V9l16 14V9" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>NEXORA</span>
+    </a>
+    <div class="links">
+      <a class="nav" href="#data" data-target="data">Data</a>
+      <a class="nav" href="#overview" data-target="overview">Overview</a>
+      <a class="nav" href="#forecast" data-target="forecast">Forecast</a>
+      <a class="nav" href="#health" data-target="health">Health</a>
+      <a class="nav" href="#alerts" data-target="alerts">Alerts</a>
+      <a class="nav" href="#obligations" data-target="obligations">Payments</a>
+      <a class="nav" href="#recs" data-target="recs">Actions</a>
+    </div>
+    <button id="btnDemo" class="pill-btn" type="button">Load demo</button>
+  </div>
+</nav>
 
-  <main id="top">
-    <header class="topbar">
+<main id="top">
+  <header id="empty" class="hero empty">
+    <h1 class="hero-title"><span class="ln">See what's</span> <span class="ln">next.</span></h1>
+    <p class="hero-sub">Know your cash position for the next 30 days. Every warning comes with the rule behind it.</p>
+    <div class="row hero-cta">
+      <button class="btn primary big" type="button" id="btnDemo2">Try the demo business</button>
+      <button class="btn-link" type="button" id="btnPick">Upload a CSV</button>
+    </div>
+    <div class="hero-glow" aria-hidden="true"></div>
+  </header>
+
+  <div class="wrap">
+    <div class="topbar">
       <div class="title">
-        <p class="eyebrow">NEXORA · See what's next.</p>
         <label class="sr-only" for="bizName">Business name</label>
         <input id="bizName" class="biz" value="My Business" maxlength="80" autocomplete="off">
         <p class="sub"><span id="asOfChip">No data loaded</span></p>
@@ -37,18 +55,18 @@
           <option value="14">Last 14 days</option>
           <option value="7">Last 7 days</option>
         </select>
-        <button id="btnDemo" class="btn primary" type="button">Load demo data</button>
         <button id="btnReset" class="btn" type="button">Reset</button>
       </div>
-    </header>
+    </div>
 
     <div id="banner" class="banner" role="status" aria-live="polite" hidden></div>
 
-    <section id="data" class="panel">
-      <div class="panel-head"><h2>Data &amp; validation</h2><span class="tag">synthetic demo data · nothing is stored</span></div>
+    <section id="data" class="panel reveal">
+      <div class="panel-head"><h2>Your data</h2><span class="tag">Synthetic demo data. Nothing is stored.</span></div>
       <div class="data-grid">
         <label id="drop" class="drop" for="file">
           <input id="file" type="file" accept=".csv,text/csv" hidden>
+          <svg class="drop-ic" viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <strong>Drop a CSV here or click to choose</strong>
           <span>Up to 1 MB · UTF-8 · ISO dates (YYYY-MM-DD)</span>
         </label>
@@ -65,22 +83,16 @@
       <div id="valStatus" class="val" hidden></div>
     </section>
 
-    <div id="empty" class="empty panel">
-      <h2>See your next 30 days of cash</h2>
-      <p>Load the demo business to explore NEXORA, or upload a transaction CSV. NEXORA works out your balance, forecasts cash day by day, and explains every warning with the rule behind it.</p>
-      <div class="row"><button class="btn primary" type="button" id="btnDemo2">Load demo data</button><button class="btn" type="button" id="btnPick">Upload a CSV</button></div>
-    </div>
-
     <div id="dash" hidden>
-      <section id="overview">
-        <div class="section-head"><h2>Overview</h2>
+      <section id="overview" class="sec">
+        <div class="section-head"><h2 class="big-h">Overview</h2>
           <label class="check"><input type="checkbox" id="showFormulas"> Show formulas</label></div>
         <div id="cards" class="cards"></div>
       </section>
 
-      <section id="forecast" class="panel">
+      <section id="forecast" class="panel reveal">
         <div class="panel-head">
-          <h2>Cash-flow forecast</h2>
+          <h2 class="big-h">Cash-flow forecast</h2>
           <div class="seg" role="group" aria-label="Forecast period">
             <button type="button" class="seg-btn" data-h="7" aria-pressed="false">7 days</button>
             <button type="button" class="seg-btn" data-h="30" aria-pressed="true">30 days</button>
@@ -111,13 +123,13 @@
         </div>
       </section>
 
-      <section id="health" class="panel">
-        <div class="panel-head"><h2>Financial health profile</h2><span class="tag">heuristic · not a credit score</span></div>
+      <section id="health" class="panel reveal">
+        <div class="panel-head"><h2 class="big-h">Financial health</h2><span class="tag">Heuristic, not a credit score</span></div>
         <div id="healthBody" class="health"></div>
       </section>
 
-      <section id="alerts" class="panel">
-        <div class="panel-head"><h2>Warnings &amp; risk alerts</h2>
+      <section id="alerts" class="panel reveal">
+        <div class="panel-head"><h2 class="big-h">Warnings</h2>
           <div class="seg" role="group" aria-label="Filter alerts" id="alertFilter">
             <button type="button" class="seg-btn" data-sev="all" aria-pressed="true">All</button>
             <button type="button" class="seg-btn" data-sev="high" aria-pressed="false">High</button>
@@ -129,8 +141,8 @@
         <ul id="skipped" class="skipped"></ul>
       </section>
 
-      <section id="obligations" class="panel">
-        <div class="panel-head"><h2>Receivables &amp; upcoming payments</h2></div>
+      <section id="obligations" class="panel reveal">
+        <div class="panel-head"><h2 class="big-h">Receivables and upcoming payments</h2></div>
         <p class="hint">Edit a date to test "what if this is paid earlier or later?". The forecast updates immediately.</p>
         <h3>Unpaid invoices (money coming in)</h3>
         <div class="table-scroll"><table id="recvTable" class="tbl"></table></div>
@@ -138,15 +150,15 @@
         <div class="table-scroll"><table id="payTable" class="tbl"></table></div>
       </section>
 
-      <section id="recs" class="panel">
-        <div class="panel-head"><h2>Recommended actions</h2><span class="tag">rule-based · no generative AI</span></div>
+      <section id="recs" class="panel reveal">
+        <div class="panel-head"><h2 class="big-h">Recommended actions</h2><span class="tag">Rule-based, no generative AI</span></div>
         <div id="recList2" class="recs"></div>
       </section>
     </div>
 
     <footer class="foot">NEXORA is an analysis aid, not financial, tax or legal advice. Demo data is synthetic. Your CSV is processed for this request only and is not stored.</footer>
-  </main>
-</div>
+  </div>
+</main>
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 <script src="/app.js"></script>
 </body>

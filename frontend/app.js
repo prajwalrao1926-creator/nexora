@@ -43,7 +43,43 @@ function toast(msg) {
   const t = $('#toast'); t.textContent = msg; t.hidden = false;
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 2800);
 }
-function showDash(on) { $('#dash').hidden = !on; $('#empty').hidden = on; }
+function showDash(on) {
+  $('#dash').hidden = !on; $('#empty').hidden = on;
+  document.body.classList.toggle('has-data', on);
+  if (on) { setupReveal(); } else { heroScroll(); }
+}
+
+/* ---------- motion helpers (all respect prefers-reduced-motion) ---------- */
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const easeOut = t => 1 - Math.pow(1 - t, 4);
+function countUp(el, to, fmt, ms = 1300, delay = 0) {
+  if (reduceMotion.matches || !isFinite(to)) return;
+  const t0 = performance.now() + delay;
+  const tick = now => {
+    const t = Math.min(1, Math.max(0, (now - t0) / ms));
+    el.textContent = fmt(to * easeOut(t));
+    if (t < 1) requestAnimationFrame(tick);
+  };
+  el.textContent = fmt(0);
+  requestAnimationFrame(tick);
+}
+let revealIO;
+function setupReveal() {
+  if (reduceMotion.matches || !('IntersectionObserver' in window)) return;
+  revealIO = revealIO || new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); revealIO.unobserve(e.target); } }), { threshold: 0.08, rootMargin: '0px 0px -6% 0px' });
+  $$('.reveal:not([data-seen]), .card:not([data-seen])').forEach(el => {
+    if (el.offsetParent === null) return;
+    el.dataset.seen = '1';
+    if (el.getBoundingClientRect().top < innerHeight * 0.9) { return; }
+    if (el.classList.contains('card')) el.style.setProperty('--d', (Array.prototype.indexOf.call(el.parentNode.children, el) * 0.06) + 's');
+    el.classList.add('pre'); revealIO.observe(el);
+  });
+}
+/* hero shrinks and fades as you scroll past it */
+function heroScroll() {
+  const h = $('#empty'); if (!h || h.hidden) return;
+  h.style.setProperty('--p', Math.min(1, Math.max(0, scrollY / (innerHeight * 0.7))).toFixed(3));
+}
 
 async function api(path, payload) {
   let res;
@@ -151,7 +187,7 @@ async function runAnalysis(first) {
     if (!data.ok) { banner('error', data.error || 'The analysis failed.'); showDash(false); return; }
     state.result = data;
     showDash(true);
-    render();
+    render(first);
     if (first) banner('ok', `Analysis ready: ${data.validation.accepted_count} records used${data.validation.rejected_count ? `, ${data.validation.rejected_count} rejected` : ''}.`);
     else banner('', '');
   } catch (e) { if (seq === state.seq) banner('error', e.message); }
@@ -167,17 +203,17 @@ function resetAll() {
 }
 
 /* ---------- rendering ---------- */
-function render() {
+function render(first) {
   const r = state.result;
   $('#asOfChip').textContent = `Reporting date ${fmtDate(r.meta.as_of)} · ${r.meta.period_days} day(s) in period · ${r.meta.record_count} records`;
   const src = r.meta.opening_balance_source;
   $('#sOpeningHint').textContent = src === 'file' ? `From file: ${money(r.meta.opening_balance)}` : src === 'assumed_zero' ? 'None supplied: assuming ₹0' : '';
   const sg = r.forecast.suggested_daily_variable_spend;
   $('#sVarHint').textContent = sg === null ? '(needs 7+ days of history)' : `(≈ ${money(sg)}/day of non-recurring spend so far)`;
-  renderCards(r); renderForecast(r); renderHealth(r); renderAlerts(r); renderTables(r); renderRecs(r);
+  renderCards(r, first); renderForecast(r, first); renderHealth(r, first); renderAlerts(r); renderTables(r); renderRecs(r);
 }
 
-function renderCards(r) {
+function renderCards(r, first) {
   const by = Object.fromEntries(r.metrics.map(m => [m.key, m]));
   const reserve = r.meta.min_reserve;
   $('#cards').innerHTML = CARD_KEYS.map(k => {
@@ -187,11 +223,12 @@ function renderCards(r) {
     if (k === 'outstanding_receivables') { const o = by.overdue_receivables; note = `${money(o.value)} overdue` + (o.note ? ` (${o.note})` : ''); if (o.value > 0) tone = 'warn'; }
     const na = m.value === null;
     const val = na ? 'Insufficient data' : m.unit === 'days' ? m.value + ' days' : money(m.value);
-    return `<div class="card ${tone}"><div class="lbl">${esc(m.label)}</div><div class="val2 ${na ? 'na' : ''}">${esc(val)}</div><div class="note">${esc(na ? m.note : note)}</div><div class="formula">ƒ ${esc(m.formula)}</div></div>`;
+    return `<div class="card ${tone}"><div class="lbl">${esc(m.label)}</div><div class="val2 ${na ? 'na' : ''}" ${na ? '' : `data-count="${m.value}" data-unit="${m.unit === 'days' ? 'days' : 'money'}"`}>${esc(val)}</div><div class="note">${esc(na ? m.note : note)}</div><div class="formula">ƒ ${esc(m.formula)}</div></div>`;
   }).join('');
+  if (first) $$('#cards .val2[data-count]').forEach((el, i) => countUp(el, Number(el.dataset.count), v => el.dataset.unit === 'days' ? Math.round(v) + ' days' : money(Math.round(v)), 1300, i * 70));
 }
 
-function renderForecast(r) {
+function renderForecast(r, animate) {
   const h = state.horizon, hz = r.forecast.horizons[h], rows = r.forecast.rows.slice(0, h), reserve = r.meta.min_reserve;
   $$('.seg-btn[data-h]').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.h) === h)));
   const tone = hz.funding_gap > 0 ? 'bad' : hz.reserve_gap > 0 ? 'warn' : 'good';
@@ -203,7 +240,7 @@ function renderForecast(r) {
     ['Expected money in', money(hz.total_inflow), ''],
     ['Expected money out', money(hz.total_outflow), ''],
   ].map(([k, v, t]) => `<div class="stat ${t}"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`).join('');
-  drawChart(r, h);
+  drawChart(r, h, animate);
   let d = '';
   if (hz.funding_gap > 0 || hz.reserve_gap > 0) {
     d += `<b>What drives the low point on ${esc(fmtDate(hz.min_date))}</b><ul>${hz.contributors.map(c => `<li>${esc(c.description)}: ${money(c.amount)} on ${shortDate(c.date)}</li>`).join('') || '<li>No scheduled payments before this date: the balance was already low.</li>'}</ul>`;
@@ -222,7 +259,7 @@ function niceStep(raw) {
   for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= raw) return m * p;
   return 10 * p;
 }
-function drawChart(r, h) {
+function drawChart(r, h, animate) {
   const rows = r.forecast.rows.slice(0, h), reserve = r.meta.min_reserve, hz = r.forecast.horizons[h];
   const pts = [{ date: r.meta.as_of, closing: hz.start_balance, inflow: 0, outflow: 0, status: 'ok', today: true }, ...rows];
   const W = 860, H = 330, L = 64, R = 30, T = 16, B = 32;
@@ -233,30 +270,31 @@ function drawChart(r, h) {
   const y = v => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
   const step = niceStep((hi - lo) / 4);
   let grid = '';
-  for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) grid += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="#E2E8F0" stroke-width="1"/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="#64748B">${compact(v)}</text>`;
+  for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) grid += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--chart-grid)" stroke-width="1"/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end" font-size="13" fill="var(--chart-ink)">${compact(v)}</text>`;
   const every = Math.max(1, Math.ceil(pts.length / 7));
   let xl = '';
-  pts.forEach((p, i) => { if (i % every === 0) xl += `<text x="${x(i)}" y="${H - 10}" text-anchor="middle" font-size="11" fill="#64748B">${shortDate(p.date)}</text>`; });
+  pts.forEach((p, i) => { if (i % every === 0) xl += `<text x="${x(i)}" y="${H - 10}" text-anchor="middle" font-size="13" fill="var(--chart-ink)">${shortDate(p.date)}</text>`; });
   const line = pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.closing).toFixed(1)}`).join(' ');
   const area = `${line} L${x(pts.length - 1).toFixed(1)},${y(lo).toFixed(1)} L${x(0).toFixed(1)},${y(lo).toFixed(1)} Z`;
   const minIdx = pts.findIndex(p => p.date === hz.min_date && !p.today);
   const dots = pts.map((p, i) => {
-    const c = p.closing < 0 ? '#B91C1C' : p.closing < reserve ? '#B45309' : '#087E8B';
-    return (p.inflow || p.outflow || i === minIdx || h === 7 || p.today) ? `<circle cx="${x(i).toFixed(1)}" cy="${y(p.closing).toFixed(1)}" r="${i === minIdx ? 5.5 : 3}" fill="${c}" ${i === minIdx ? 'stroke="#FFFFFF" stroke-width="1.5"' : ''}/>` : '';
+    const c = p.closing < 0 ? 'var(--chart-red)' : p.closing < reserve ? 'var(--chart-amber)' : 'var(--chart-line)';
+    return (p.inflow || p.outflow || i === minIdx || h === 7 || p.today) ? `<circle class="pt" cx="${x(i).toFixed(1)}" cy="${y(p.closing).toFixed(1)}" r="${i === minIdx ? 6 : 3.5}" fill="${c}" ${i === minIdx ? 'stroke="var(--panel)" stroke-width="2.5"' : ''}/>` : '';
   }).join('');
-  const shortfall = lo < 0 ? `<rect x="${L}" y="${y(0)}" width="${W - L - R}" height="${y(lo) - y(0)}" fill="#EF4444" opacity=".10"/><line x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" stroke="#EF4444" stroke-width="1.2"/>` : '';
-  const lowLabel = minIdx > 0 ? `<text x="${Math.min(Math.max(x(minIdx), L + 40), W - R - 40)}" y="${y(pts[minIdx].closing) + (pts[minIdx].closing < 0 ? 20 : -10)}" text-anchor="middle" font-size="11.5" font-weight="700" fill="#172033">Low ${compact(pts[minIdx].closing)}</text>` : '';
+  const shortfall = lo < 0 ? `<rect x="${L}" y="${y(0)}" width="${W - L - R}" height="${y(lo) - y(0)}" fill="var(--chart-red)" opacity=".10"/><line x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" stroke="var(--chart-red)" stroke-width="1.2"/>` : '';
+  const lowLabel = minIdx > 0 ? `<text x="${Math.min(Math.max(x(minIdx), L + 40), W - R - 40)}" y="${y(pts[minIdx].closing) + (pts[minIdx].closing < 0 ? 20 : -10)}" text-anchor="middle" font-size="14" font-weight="700" fill="var(--text)">Low ${compact(pts[minIdx].closing)}</text>` : '';
   $('#chartWrap').innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Projected cash balance for the next ${h} days. Lowest ${money(hz.min_balance)} on ${fmtDate(hz.min_date)}. The table below lists every day.">
-<defs><linearGradient id="g1" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#087E8B" stop-opacity=".20"/><stop offset="1" stop-color="#087E8B" stop-opacity="0"/></linearGradient></defs>
+<defs><linearGradient id="g1" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--chart-line)" stop-opacity=".28"/><stop offset="1" stop-color="var(--chart-line)" stop-opacity="0"/></linearGradient></defs>
 ${grid}${shortfall}
-<path d="${area}" fill="url(#g1)"/>
-<line x1="${L}" x2="${W - R}" y1="${y(reserve)}" y2="${y(reserve)}" stroke="#B45309" stroke-width="1.3" stroke-dasharray="6 5"/>
-<text x="${W - R - 4}" y="${y(reserve) - 5}" text-anchor="end" font-size="11" fill="#B45309">Reserve ${compact(reserve)}</text>
-<path d="${line}" fill="none" stroke="#087E8B" stroke-width="2.4" stroke-linejoin="round"/>
+<path class="area-fill" d="${area}" fill="url(#g1)"/>
+<line x1="${L}" x2="${W - R}" y1="${y(reserve)}" y2="${y(reserve)}" stroke="var(--chart-amber)" stroke-width="1.3" stroke-dasharray="6 5"/>
+<text x="${W - R - 4}" y="${y(reserve) - 5}" text-anchor="end" font-size="13" fill="var(--chart-amber)">Reserve ${compact(reserve)}</text>
+<path class="ln-path" pathLength="1" d="${line}" fill="none" stroke="var(--chart-line)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
 ${dots}${lowLabel}${xl}
-<line id="guide" x1="0" x2="0" y1="${T}" y2="${H - B}" stroke="#64748B" stroke-dasharray="3 4" visibility="hidden"/>
+<line id="guide" x1="0" x2="0" y1="${T}" y2="${H - B}" stroke="var(--chart-ink)" stroke-dasharray="3 4" visibility="hidden"/>
 <rect id="hit" x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}" fill="transparent"/></svg>
-<div class="legend"><span style="--c:#087E8B">Projected balance (estimate)</span><span style="--c:#B45309">Minimum reserve</span><span style="--c:#B91C1C">Below zero</span></div><div class="tip" id="tip" hidden></div>`;
+<div class="legend"><span style="--c:var(--chart-line)">Projected balance (estimate)</span><span style="--c:var(--chart-amber)">Minimum reserve</span><span style="--c:var(--chart-red)">Below zero</span></div><div class="tip" id="tip" hidden></div>`;
+  const wrap = $('#chartWrap'); wrap.classList.remove('draw'); void wrap.offsetWidth; if (animate && !reduceMotion.matches) wrap.classList.add('draw');
   const svg = $('#chartWrap svg'), tip = $('#tip'), guide = $('#guide');
   const move = ev => {
     const rect = svg.getBoundingClientRect(), vx = (ev.clientX - rect.left) / rect.width * W;
@@ -271,14 +309,16 @@ ${dots}${lowLabel}${xl}
   svg.addEventListener('pointermove', move); svg.addEventListener('pointerdown', move); svg.addEventListener('pointerleave', leave);
 }
 
-function renderHealth(r) {
+function renderHealth(r, first) {
   const hp = r.health, s = hp.score;
-  const col = s === null ? '#64748B' : s >= 75 ? '#15803D' : s >= 45 ? '#B45309' : '#B91C1C', C = 2 * Math.PI * 60;
-  const ring = `<svg viewBox="0 0 150 150" role="img" aria-label="Health index ${s === null ? 'not available' : s + ' out of 100'}"><circle cx="75" cy="75" r="60" fill="none" stroke="#E2E8F0" stroke-width="12"/>${s === null ? '' : `<circle cx="75" cy="75" r="60" fill="none" stroke="${col}" stroke-width="12" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - s / 100)}" transform="rotate(-90 75 75)"/>`}<text x="75" y="84" text-anchor="middle" font-size="${s === null ? 16 : 36}" font-weight="700" fill="#172033">${s === null ? 'n/a' : s}</text></svg>`;
-  $('#healthBody').innerHTML = `<div class="score">${ring}<div class="lab" style="color:${col}">${esc(hp.label)}</div><small>NEXORA Health Index (0–100)<br>heuristic summary, not a credit rating</small></div>
+  const col = s === null ? 'var(--muted)' : s >= 75 ? 'var(--green)' : s >= 45 ? 'var(--chart-amber)' : 'var(--red)', C = 2 * Math.PI * 60;
+  const ring = `<svg viewBox="0 0 150 150" role="img" aria-label="Health index ${s === null ? 'not available' : s + ' out of 100'}"><circle cx="75" cy="75" r="60" fill="none" stroke="var(--fill2)" stroke-width="12"/>${s === null ? '' : `<circle ${first ? 'class="ring-fg"' : ''} style="--c:${C}" cx="75" cy="75" r="60" fill="none" stroke="${col}" stroke-width="12" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - s / 100)}" transform="rotate(-90 75 75)"/>`}<text x="75" y="84" text-anchor="middle" font-size="${s === null ? 16 : 36}" font-weight="700" fill="var(--text)" ${s === null ? '' : 'id="scoreNum"'}>${s === null ? 'n/a' : s}</text></svg>`;
+  const _hb = $('#healthBody');
+  _hb.innerHTML = `<div class="score">${ring}<div class="lab" style="color:${col}">${esc(hp.label)}</div><small>NEXORA Health Index (0–100)<br>heuristic summary, not a credit rating</small></div>
 <div><div class="dims">${hp.dimensions.map(d => `<div class="dim"><span class="nm">${esc(d.label)}</span><span class="badge b-${d.status}">${LABEL[d.status]}</span><span class="vl">${esc(d.value)}</span><details><summary>How this is judged</summary><p>${esc(d.rule)}</p><p>${esc(d.explanation)}</p></details></div>`).join('')}</div>
 <p class="hint" style="margin-top:12px"><b>Main factors:</b></p><ul class="factors">${hp.factors.map(f => `<li>${esc(f)}</li>`).join('')}</ul>
 <details class="assume-list"><summary>Score formula and limits</summary><p>${esc(hp.formula)}</p><p>${esc(hp.disclaimer)}</p></details></div>`;
+  const sn = $('#scoreNum'); if (first && sn) countUp(sn, s, v => String(Math.round(v)), 1500, 150);
 }
 
 function renderAlerts(r) {
@@ -318,7 +358,7 @@ const drop = $('#drop');
 ['dragleave', 'drop'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('over'); }));
 drop.addEventListener('drop', e => handleFile(e.dataTransfer.files[0]));
 
-$$('.seg-btn[data-h]').forEach(b => b.addEventListener('click', () => { state.horizon = Number(b.dataset.h); if (state.result) renderForecast(state.result); }));
+$$('.seg-btn[data-h]').forEach(b => b.addEventListener('click', () => { state.horizon = Number(b.dataset.h); if (state.result) renderForecast(state.result, true); }));
 $$('#alertFilter .seg-btn').forEach(b => b.addEventListener('click', () => { state.severity = b.dataset.sev; if (state.result) renderAlerts(state.result); }));
 $('#showFormulas').addEventListener('change', e => document.body.classList.toggle('show-formulas', e.target.checked));
 
@@ -367,8 +407,9 @@ function spy() {
   for (const a of $$('.nav')) { const s = document.getElementById(a.dataset.target); if (s && s.offsetParent !== null && s.getBoundingClientRect().top <= 140) cur = a.dataset.target; }
   $$('.nav').forEach(a => a.classList.toggle('active', a.dataset.target === cur));
 }
-window.addEventListener('scroll', () => { if (!ticking) { ticking = true; requestAnimationFrame(spy); } }, { passive: true });
+window.addEventListener('scroll', () => { if (!ticking) { ticking = true; requestAnimationFrame(() => { spy(); heroScroll(); }); } }, { passive: true });
 
 resetAssumptionInputs();
 spy();
+heroScroll();
 })();
